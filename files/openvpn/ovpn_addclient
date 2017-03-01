@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+# Shell script to create credetials for a OpenVPN user with EasyRSA.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+
+# Configuration files
+EASYRSA_VARS="/opt/easyrsa/vars"
+
+# Variables
+OVPN_USERNAME=
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    -u <USERNAME>  The username for the OpenVPN client."
+}
+
+# Options parsing
+while getopts ":u:" opt; do
+  case $opt in
+    u)
+      OVPN_USERNAME=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+# Check requirements
+if [[ "x${OVPN_USERNAME}" = "x" ]]; then
+  echo >&2 "  [ERROR] The username (-u) option is mandatory."
+  exit 5
+fi
+
+# Create the client credentials
+easyrsa --vars=${EASYRSA_VARS} build-client-full ${OVPN_USERNAME} nopass
+
+# All done
+echo "  [INFO] Credentials successfully created"
+exit 0

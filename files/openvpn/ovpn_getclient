@@ -1,0 +1,110 @@
+#!/bin/bash
+#
+# Shell script to obtain the configurations for a OpenVPN client.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+
+# Configuration files
+EASYRSA_VARS="/opt/easyrsa/vars"
+OVPN_ENV="/etc/openvpn/env"
+
+# Variables
+OVPN_USERNAME=
+
+__EASYRSA_DIR__="/opt/easyrsa"
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    -u <USERNAME>  The username of the OpenVPN client."
+}
+
+# Options parsing
+while getopts ":u:" opt; do
+  case $opt in
+    u)
+      OVPN_USERNAME=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+# Check requirements
+if [[ "x${OVPN_USERNAME}" = "x" ]]; then
+  echo >&2 "  [ERROR] The username (-u) option is mandatory."
+  exit 5
+fi
+
+# Check if client credentials exist
+if [[ ! -f "${__EASYRSA_DIR__}/pki/private/${OVPN_USERNAME}.key" ]]; then
+  echo >&2 "  [ERROR] Unable to find client ${OVPN_USERNAME} information."
+  exit 6
+fi
+
+# Import env
+if [[ -f ${OVPN_ENV} ]]; then
+  . ${OVPN_ENV}
+else
+  echo >&2 "  [ERROR] OpenVPN information is missing."
+  exit 7
+fi
+
+# Generate the configurations
+cat <<EOF
+client
+nobind
+dev tun
+resolv-retry infinite
+remote-cert-tls server
+<key>
+$(cat ${__EASYRSA_DIR__}/pki/private/${OVPN_USERNAME}.key)
+</key>
+<cert>
+$(cat ${__EASYRSA_DIR__}/pki/issued/${OVPN_USERNAME}.crt)
+</cert>
+<ca>
+$(cat ${__EASYRSA_DIR__}/pki/ca.crt)
+</ca>
+<tls-auth>
+$(cat ${__EASYRSA_DIR__}/pki/ta.key)
+</tls-auth>
+comp-lzo
+key-direction 1
+remote ${OVPN_SERVER_CN} ${OVPN_SERVER_PORT} ${OVPN_SERVER_PROTO}
+EOF
+[[ "${OVPN_DEFROUTE}" -gt 0 ]] && echo 'redirect-gateway def1'
+
+# All done
+exit 0

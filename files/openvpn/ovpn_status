@@ -1,0 +1,50 @@
+#!/bin/bash
+#
+# Shell script to show the OpenVPN status.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+
+# Variables
+OVPN_STATUS="/etc/openvpn/openvpn-status.log"
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    <none>"
+}
+
+# Check arguments
+if [[ $# -ne 0 ]]; then
+  show_usage
+  exit 1
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 2
+fi
+
+# Show the status
+if [[ -f ${OVPN_STATUS} ]]; then
+  cat ${OVPN_STATUS}
+else
+  echo >&2 "  [ERROR] No OpenVPN status available."
+  exit 3
+fi
+
+# All done
+exit 0

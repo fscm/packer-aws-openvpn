@@ -1,0 +1,22 @@
+# Packer
+builds/cache/*
+builds/providers/*
+builds/sandbox/*
+!.gitkeep
+
+# macOS
+*.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+
+# Windows
+Desktop.ini
+Thumbs.db
+
+# OpenVPN
+*.ovpn
+

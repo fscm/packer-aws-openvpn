@@ -1,0 +1,274 @@
+#!/bin/bash
+#
+# Shell script to configure some options of OpenVPN.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+__TS__=$(date +%Y%m%d%H%M%S)
+
+# Configuration files
+OVPN_CONF="/etc/openvpn/server.conf"
+OVPN_ENV="/etc/openvpn/env"
+
+# Variables
+OVPN_DISABLE=0
+OVPN_ENABLE=0
+OVPN_START=0
+OVPN_WAIT=0
+
+OVPN_CLIENT_TO_CLIENT=0
+OVPN_DEFROUTE=1
+OVPN_DNS=1
+OVPN_NAT=0
+OVPN_NS=()
+OVPN_PUSH=()
+OVPN_ROUTES=()
+OVPN_SERVER_ADDR=
+OVPN_SERVER_CN=
+OVPN_SERVER_PORT=
+OVPN_SERVER_PROTO=
+OVPN_SERVER_CIDR="172.16.61.0/24"
+
+__TMP_NS__=()
+__TMP_PUSH__=()
+__TMP_ROUTES__=()
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    -c             Enables the client-to-client option."
+  echo "    -d             Disables the built in external DNS."
+  echo "    -D             Disables the OpenVPN service from start at boot time."
+  echo "    -E             Enables the OpenVPN service to start at boot time."
+  echo "    -g             Disables the NAT routing and Default Gateway."
+  echo "    -n <ADDRESS>   Sets a Name Server to be pushed to the clients."
+  echo "    -N             Configures NAT to access external server network."
+  echo "    -p <RULE>      Sets a rule to be pushed to the clients."
+  echo "    -r <ROUTE>     Sets a route to be added on the client side (e.g.: "
+  echo "                   '10.0.0.0/16')."
+  echo "    -s <CIDR>      The OpenVPN service subnet (e.g.: '172.16.0.0/12')."
+  echo "    -S             Starts the OpenVPN service after performing the required"
+  echo "                   configurations (if any given)."
+  echo "    -W <SECONDS>   Waits the specified amount of seconds before starting the"
+  echo "                   OpenVPN service (default value is '0')."
+  echo "    -u <ADDRESS>   The OpenVPN server public DNS name. Should be in the form"
+  echo "                   of (udp|tcp)://<server_dns_name>:<server_port> ."
+}
+
+# Convert CIDR to Netmask
+cidr_to_mask() {
+  set -- $(( 5 - ($1 / 8) )) 255 255 255 255 $(( (255 << (8 - ($1 % 8))) & 255 )) 0 0 0
+  [ $1 -gt 1 ] && shift $1 || shift
+  echo ${1-0}.${2-0}.${3-0}.${4-0}
+}
+
+# Get route in 'address netmask' notation
+get_route() {
+  echo ${1%/*} $(cidr_to_mask ${1#*/})
+}
+
+# Import env
+if [[ -f ${OVPN_ENV} ]]; then
+  . ${OVPN_ENV}
+fi
+
+# Options parsing
+while getopts ":cdDEgn:Np:r:s:SW:u:" opt; do
+  case $opt in
+    c)
+      OVPN_CLIENT_TO_CLIENT=1
+      ;;
+    d)
+      OVPN_DNS=0
+      ;;
+    D)
+      OVPN_DISABLE=1
+      ;;
+    E)
+      OVPN_ENABLE=1
+      ;;
+    g)
+      OVPN_DEFROUTE=0
+      ;;
+    n)
+      __TMP_NS__+=("${OPTARG}")
+      ;;
+    N)
+      OVPN_NAT=1
+      ;;
+    p)
+      __TMP_PUSH__+=("${OPTARG}")
+      ;;
+    r)
+      __TMP_ROUTES__+=("${OPTARG}")
+      ;;
+    s)
+      OVPN_SERVER_CIDR=${OPTARG}
+      ;;
+    S)
+      OVPN_START=1
+      ;;
+    W)
+      OVPN_WAIT=${OPTARG}
+      ;;
+    u)
+      OVPN_SERVER_ADDR=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+# Check requirements
+if [[ "${OVPN_ENABLE}" -gt 0 ]] && [[ "${OVPN_DISABLE}" -gt 0 ]]; then
+  echo >&2 "  [ERROR] Enable (-E) and Disable (-D) options can not be used together."
+  exit 5
+fi
+if [[ "x${OVPN_SERVER_ADDR}" = "x" ]]; then
+  echo >&2 "  [ERROR] The OpenVPN public DNS name (-u) option is required."
+  exit 6
+fi
+if [[ "x${OVPN_SERVER_CIDR}" = "x" ]]; then
+  echo >&2 "  [ERROR] The OpenVPN subnet (-s) option is required."
+  exit 7
+fi
+if ! [[ "${OVPN_SERVER_CIDR}" =~ ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$ ]]; then
+  echo >&2 "  [ERROR] The OpenVPN subnet (-s) option has an invalid format."
+  exit 8
+fi
+
+# Backup configuration files
+if [[ -f ${OVPN_CONF} ]]; then
+  cp ${OVPN_CONF} ${OVPN_CONF}.${__TS__}.bck
+fi
+if [[ -f ${OVPN_ENV} ]]; then
+  cp ${OVPN_ENV} ${OVPN_ENV}.${__TS__}.bck
+fi
+
+# Set client routes
+OVPN_ROUTES=($(tr ' ' '\n' <<< "${__TMP_ROUTES__[@]} ${OVPN_SERVER_CIDR}" | sort -u | tr '\n' ' '))
+
+# Set client rules
+OVPN_PUSH=($(tr ' ' '\n' <<< "${__TMP_PUSH__[@]// /_}" | sort -u | tr '\n' ' '))
+
+# Set nameservers
+if [[ ${#__TMP_NS__[@]} -gt 0 ]]; then
+  OVPN_NS=($(tr ' ' '\n' <<< "${__TMP_NS__[@]}" | sort -u | tr '\n' ' '))
+else
+  OVPN_NS=("8.8.8.8" "8.8.4.4")
+fi
+
+# Set the OpenVPN server address
+if [[ "${OVPN_SERVER_ADDR}" =~ ^((udp|tcp)://)?([0-9a-zA-Z\.\-]+)(:([0-9]+))?$  ]]; then
+  OVPN_SERVER_PROTO=${BASH_REMATCH[2]}
+  OVPN_SERVER_CN=${BASH_REMATCH[3]}
+  OVPN_SERVER_PORT=${BASH_REMATCH[5]}
+else
+  echo >&2 "  [ERROR] Invalid OpenVPN public DNS name."
+  exit 9
+fi
+[[ -z "${OVPN_SERVER_PROTO}" ]] && OVPN_SERVER_PROTO="udp"
+[[ -z "${OVPN_SERVER_PORT}" ]] && OVPN_SERVER_PORT="1194"
+OVPN_SERVER_ADDR="${OVPN_SERVER_PROTO}://${OVPN_SERVER_CN}:${OVPN_SERVER_PORT}"
+
+# Store the values on the env file
+set | grep "^OVPN_" | sort > "${OVPN_ENV}"
+
+# Generate the configuration file
+cat > ${OVPN_CONF} <<EOF
+port ${OVPN_SERVER_PORT}
+proto ${OVPN_SERVER_PROTO}
+dev tun
+ca ca.crt
+cert server.crt
+key server.key
+dh dh2048.pem
+crl-verify crl.pem
+server $(get_route ${OVPN_SERVER_CIDR})
+ifconfig-pool-persist ipp.txt
+keepalive 10 120
+tls-auth ta.key 0
+comp-lzo
+user nobody
+group nogroup
+persist-key
+persist-tun
+status openvpn-status.log
+verb 3
+EOF
+[[ "${OVPN_DEFROUTE}" -gt 0 ]] && echo 'push "redirect-gateway def1 bypass-dhcp"' >> ${OVPN_CONF}
+[[ "${OVPN_CLIENT_TO_CLIENT}" -gt 0 ]] && echo 'client-to-client' >> ${OVPN_CONF}
+if [[ "${OVPN_DNS}" -gt 0 ]]; then
+  for dns in "${OVPN_NS[@]}"; do
+    echo "push \"dhcp-option DNS ${dns}\"" >> ${OVPN_CONF}
+  done
+fi
+for route in "${OVPN_ROUTES[@]}"; do
+  echo "route $(get_route ${route})" >> ${OVPN_CONF}
+done
+for push in "${OVPN_PUSH[@]}"; do
+  echo "push \"${push//_/ }\"" >> ${OVPN_CONF}
+done
+
+# Configure NAT
+if [[ "${OVPN_NAT}" -gt 0 ]]; then
+  iptables --table nat --check POSTROUTING --source ${OVPN_SERVER_CIDR} --out-interface eth0 --jump MASQUERADE &> /dev/null
+  RETVAL=$?
+  if [[ ${RETVAL} -eq 0 ]]; then
+    echo "  [INFO] NAT rule already existes."
+  else
+    iptables --table nat --append POSTROUTING --source ${OVPN_SERVER_CIDR} --out-interface eth0 --jump MASQUERADE &> /dev/null
+    netfilter-persistent save
+    echo "  [INFO] NAT rule added to iptables."
+  fi
+fi
+
+# Enable the service
+[[ "${OVPN_ENABLE}" -gt 0 ]] && systemctl enable openvpn@server.service
+
+# Disable the service
+[[ "${OVPN_DISABLE}" -gt 0 ]] && systemctl disable openvpn@server.service
+
+# Start the service
+if [[ "${OVPN_START}" -gt 0 ]]; then
+  echo "  [INFO] OpenVPN will start in ${OVPN_WAIT} second(s)..."
+  nohup sh -c "sleep ${OVPN_WAIT} ; systemctl restart openvpn@server.service" &> /dev/null &
+fi
+
+# Clean up unneeded backups
+diff -q ${OVPN_ENV} ${OVPN_ENV}.${__TS__}.bck &> /dev/null && rm -f ${OVPN_ENV}.${__TS__}.bck || true
+diff -q ${OVPN_CONF} ${OVPN_CONF}.${__TS__}.bck &> /dev/null && rm -f ${OVPN_CONF}.${__TS__}.bck || true
+
+# All done
+echo "  [INFO] Configuration(s) successfully updated"
+exit 0

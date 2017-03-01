@@ -1,0 +1,89 @@
+#!/bin/bash
+#
+# Shell script to revoke credetials for a OpenVPN user with EasyRSA.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+
+# Configuration files
+EASYRSA_VARS="/opt/easyrsa/vars"
+
+# Variables
+OVPN_USERNAME=
+
+__EASYRSA_DIR__="/opt/easyrsa"
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    -u <USERNAME>  The username of the OpenVPN client."
+}
+
+# Options parsing
+while getopts ":u:" opt; do
+  case $opt in
+    u)
+      OVPN_USERNAME=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+# Check requirements
+if [[ "x${OVPN_USERNAME}" = "x" ]]; then
+  echo >&2 "  [ERROR] The username (-u) option is mandatory."
+  exit 5
+fi
+
+# Check if client credentials exist
+if [[ ! -f "${__EASYRSA_DIR__}/pki/private/${OVPN_USERNAME}.key" ]]; then
+  echo >&2 "  [ERROR] Unable to find client ${OVPN_USERNAME} information."
+  exit 6
+fi
+
+# Revoke the client certificate
+easyrsa --vars=${EASYRSA_VARS} --batch revoke ${OVPN_USERNAME}
+
+# Create an updated CRL
+easyrsa --vars=${EASYRSA_VARS} gen-crl ${OVPN_USERNAME}
+
+# Copy required files to OpenVPN
+cp ${__EASYRSA_DIR__}/pki/crl.pem /etc/openvpn/
+
+# Enforce usage of the updated CRL file
+systemctl restart openvpn@server.service
+
+# All done
+echo "  [INFO] Credentials successfully revoked"
+exit 0

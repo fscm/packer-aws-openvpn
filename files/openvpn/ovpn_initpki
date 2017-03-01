@@ -1,0 +1,89 @@
+#!/bin/bash
+#
+# Shell script to initialize a CA with EasyRSA.
+#
+# Copyright 2016-2017, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASEDIR=$(dirname $0)
+BASENAME=$(basename $0)
+
+# Configuration files
+EASYRSA_VARS="/opt/easyrsa/vars"
+
+# Variables
+CERTIFICATE_CN=
+
+__EASYRSA_DIR__="/opt/easyrsa"
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options]"
+  echo "  options:"
+  echo "    -c <CN>  The Common Name to use for the CA certificate."
+}
+
+# Options parsing
+while getopts ":c:" opt; do
+  case $opt in
+    c)
+      CERTIFICATE_CN=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+# Check requirements
+if [[ "x${CERTIFICATE_CN}" = "x" ]]; then
+  echo >&2 "  [ERROR] The Common Name (-c) option is mandatory."
+  exit 5
+fi
+
+# Initialize (clean up) the CA PKI directory
+easyrsa --vars=${EASYRSA_VARS} --batch init-pki
+
+# Create/Build root certificate
+echo "${CERTIFICATE_CN}" | easyrsa --vars=${EASYRSA_VARS} build-ca nopass
+
+# Create the OpenVPN statuc key
+openvpn --genkey --secret ${__EASYRSA_DIR__}/pki/ta.key
+
+# Generate and sign the server key pair
+easyrsa --vars=${EASYRSA_VARS} build-server-full server nopass
+
+# Create an empty CRL
+easyrsa --vars=${EASYRSA_VARS} gen-crl
+
+# Copy required files to OpenVPN
+cp ${__EASYRSA_DIR__}/pki/{ta.key,ca.crt,crl.pem,issued/server.crt,private/server.key} /etc/openvpn/
+
+# All done
+echo "  [INFO] Configuration(s) successfully updated"
+exit 0
