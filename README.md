@@ -37,8 +37,11 @@ AWS Command Line Interface installation instructions can be found [here](http://
 
 #### Debian AMI's
 
+This AMI will be based on an official Debian AMI. The latest version of that
+AMI will be used.
+
 A list of all the Debian AMI id's can be found at the Debian official page:
-[Debian oficial Amazon EC2 Images](https://wiki.debian.org/Cloud/AmazonEC2Image/)
+[Debian official Amazon EC2 Images](https://wiki.debian.org/Cloud/AmazonEC2Image/)
 
 ### Usage
 
@@ -51,7 +54,6 @@ Usage:
     -var 'aws_access_key=AWS_ACCESS_KEY' \
     -var 'aws_secret_key=<AWS_SECRET_KEY>' \
     -var 'aws_region=<AWS_REGION>' \
-    -var 'aws_base_ami=<BASE_IMAGE>' \
     [-var 'option=value'] \
     openvpn.json
 ```
@@ -61,7 +63,6 @@ Usage:
 - `aws_access_key` - *[required]* The AWS access key.
 - `aws_ami_name` - The AMI name (default value: "openvpn").
 - `aws_ami_name_prefix` - Prefix for the AMI name (default value: "").
-- `aws_base_ami` - *[required]* The AWS base AMI id to use. See [here](https://wiki.debian.org/Cloud/AmazonEC2Image/) for a list of available options.
 - `aws_instance_type` - The instance type to use for the build (default value: "t2.micro").
 - `aws_region` - *[required]* The regions were the build will be performed.
 - `aws_secret_key` - *[required]* The AWS secret key.

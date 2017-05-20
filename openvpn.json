@@ -6,7 +6,6 @@
     "aws_access_key":       "{{env `aws_access_key`}}",
     "aws_ami_name":         "openvpn",
     "aws_ami_name_prefix":  "",
-    "aws_base_ami":         "{{env `aws_base_ami`}}",
     "aws_instance_type":    "t2.micro",
     "aws_region":           "{{env `aws_region`}}",
     "aws_secret_key":       "{{env `aws_secret_key`}}",
@@ -25,11 +24,20 @@
     "access_key":                  "{{user `aws_access_key`}}",
     "secret_key":                  "{{user `aws_secret_key`}}",
     "region":                      "{{user `aws_region`}}",
-    "source_ami":                  "{{user `aws_base_ami`}}",
     "instance_type":               "{{user `aws_instance_type`}}",
     "ssh_username":                "{{user `aws_ssh_username`}}",
     "associate_public_ip_address": true,
-    "ami_name":                    "{{user `aws_ami_name_prefix`}}{{user `aws_ami_name`}}-({{isotime \"20060102150405\"}})"
+    "ami_name":                    "{{user `aws_ami_name_prefix`}}{{user `aws_ami_name`}}-({{isotime \"20060102150405\"}})",
+    "source_ami_filter": {
+      "filters": {
+        "architecture": "x86_64",
+        "name": "debian-jessie-*",
+        "root-device-type": "ebs",
+        "virtualization-type": "hvm"
+      },
+      "owners": ["379101102735"],
+      "most_recent": true
+    }
   }],
   "provisioners": [
     {
