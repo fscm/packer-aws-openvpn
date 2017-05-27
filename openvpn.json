@@ -30,12 +30,12 @@
     "ami_name":                    "{{user `aws_ami_name_prefix`}}{{user `aws_ami_name`}}-({{isotime \"20060102150405\"}})",
     "source_ami_filter": {
       "filters": {
-        "architecture": "x86_64",
-        "name": "debian-jessie-*",
-        "root-device-type": "ebs",
+        "architecture":        "x86_64",
+        "name":                "debian-jessie-*",
+        "root-device-type":    "ebs",
         "virtualization-type": "hvm"
       },
-      "owners": ["379101102735"],
+      "owners":      ["379101102735"],
       "most_recent": true
     }
   }],
