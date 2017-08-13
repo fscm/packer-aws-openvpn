@@ -53,6 +53,9 @@
     {
       "type":           "shell",
       "inline_shebang": "/bin/bash -e",
+      "environment_vars": [
+        "DEBIAN_FRONTEND=noninteractive"
+      ],
       "inline": [
         "unset HISTFILE",
         "history -cw",
@@ -61,7 +64,7 @@
         "echo === System Packages ===",
         "echo 'deb http://ftp.debian.org/debian jessie-backports main contrib non-free' | sudo tee /etc/apt/sources.list.d/backports.list > /dev/null",
         "sudo apt-get -qq update",
-        "sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install --no-install-recommends apt-transport-https apt-show-versions bash-completion logrotate ntp ntpdate htop vim wget curl dbus bmon nmon parted wget curl sudo rsyslog ethtool unzip zip telnet tcpdump strace tar libyaml-0-2 lsb-base lsb-release xfsprogs sysfsutils",
+        "sudo apt-get -y -qq install --no-install-recommends apt-transport-https apt-show-versions bash-completion logrotate ntp ntpdate htop vim wget curl dbus bmon nmon parted wget curl sudo rsyslog ethtool unzip zip telnet tcpdump strace tar libyaml-0-2 lsb-base lsb-release xfsprogs sysfsutils",
         "sudo apt-get -y -qq --purge autoremove",
         "sudo apt-get autoclean",
         "sudo apt-get clean",
@@ -81,7 +84,7 @@
         "sudo sed -i -r -e '/UseDNS /{h;s/#*UseDNS .*/UseDNS no/};${x;/^$/{s//\\nUseDNS no/;H};x}' /etc/ssh/sshd_config",
         "echo === Entropy Generation ===",
         "sudo apt-get -qq update",
-        "sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install --no-install-recommends rng-tools",
+        "sudo apt-get -y -qq install --no-install-recommends rng-tools",
         "sudo apt-get autoclean",
         "sudo apt-get clean",
         "sudo sed -i -r -e 's/^HRNGDEVICE/#HRNGDEVICE/g' /etc/default/rng-tools",
@@ -90,7 +93,7 @@
         "sudo systemctl start rng-tools.service",
         "echo === OpenVPN ===",
         "sudo apt-get -qq update",
-        "sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install --no-install-recommends openvpn openssl iptables iptables-persistent netfilter-persistent",
+        "sudo apt-get -y -qq install --no-install-recommends openvpn openssl iptables iptables-persistent netfilter-persistent",
         "sudo apt-get autoclean",
         "sudo apt-get clean",
         "sudo openssl dhparam -out /etc/openvpn/dh2048.pem 2048",
