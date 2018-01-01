@@ -2,7 +2,7 @@
 #
 # Shell script to obtain the OpenVPN user configurations.
 #
-# Copyright 2016-2017, Frederico Martins
+# Copyright 2016-2018, Frederico Martins
 #   Author: Frederico Martins <http://github.com/fscm>
 #
 # SPDX-License-Identifier: MIT
