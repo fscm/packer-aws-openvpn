@@ -289,7 +289,7 @@ The following ports will have to be configured on Security Groups.
 
 | Service    | Port      | Protocol |
 |------------|:---------:|:--------:|
-| SSH        | 22        |    TCP   |
+| SSH        | 222       |    TCP   |
 | OpenVPN    | 1194      |    UDP   |
 
 If this image is tu be used as a NAT instance other ports may have to be
