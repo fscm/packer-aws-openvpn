@@ -2,7 +2,7 @@
 #
 # Shell script to create a user on the OpenVPN server.
 #
-# Copyright 2016-2020, Frederico Martins
+# Copyright 2016-2021, Frederico Martins
 #   Author: Frederico Martins <http://github.com/fscm>
 #
 # SPDX-License-Identifier: MIT
